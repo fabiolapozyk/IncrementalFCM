@@ -146,9 +146,12 @@ class FuzzyCMeans(object):
     is modified at each step of the execution of the algorithm. This property is
     not writable.'''
 
-    def __getx(self):
+    def getx(self):
         return self.__x
-    x = property(__getx, None)
+    
+    def setx(self,newX):
+        self.__x = newX
+    x = property(getx, setx)
     '''The vectors in which the algorithm bases its convergence. This property
     is not writable.'''
 
@@ -361,15 +364,8 @@ class FuzzyCMeans(object):
     
     
     def getClusterLabel(self, trueLabels):
-        cluster_point = array(self.getClusters())
-        labels = []
-        for k in range(len(self.__centr)):
-            l = []
-            for j in range(len(cluster_point)):
-                if (k == cluster_point[j]):
-                    l.append(j)
-            labels.append(int(trueLabels[l[np.argmax(self.mu[l, k])]]))        
-        
+        ind = np.argmax(self.mu, axis=0)
+        labels = trueLabels[ind]
         return array(labels) 
 
             

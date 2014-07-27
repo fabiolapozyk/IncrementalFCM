@@ -69,7 +69,7 @@ class DataManager(object):
     Restituisce le true label del dataset caricato
     '''
     def getTrueLabels(self):
-        return self.dataset[:,self.columnLabel] 
+        return self.dataset[:,self.columnLabel]
             
     def __initB(self, indices):
             b = zeros(len(self.dataset))
@@ -101,8 +101,8 @@ class DataManager(object):
             F[ind,:] = p
         return F
     
-    def getIndexPoint(self):
-          return self.dataset[:,self.columnindexPoint] 
+    def getIndices(self):
+        return self.dataset[:,self.columnindexPoint] 
     
     '''
     Genera gli indici dei  punti da etichettare casualmente per ogni chunk e con la stessa percentuale di etichettatura 
@@ -136,14 +136,18 @@ class DataManager(object):
         self.b=FileManager.readArray(nameFileb)
         self.F=FileManager.readMatrix(nameFileF)
     
-    '''
-    L'insieme degli id delle immagini che costituiscono ciascun cluster
+    
+    def clusterIndices(self, predCluster, indices, trueLabels):
+        '''
+        Ottiene la composizione di ciascun cluster
         predCluster: array contenente per ogni punto, il cluster a cui appartiene
-    '''
-    def clusterIndices(self, predCluster):
+        indices: array o lista contenente gli indici dei punti
+        trueLabels: array che contiene le true label dei punti
+        return: dizionario avente come chiavi gli id dei cluster e come elementi liste di coppie (id_immagine, true_label)
+        '''
         l={}
         for i in range(len(predCluster)):
-            l.setdefault(predCluster[i],[]).append((self.dataset[i,self.columnindexPoint],self.classes[self.dataset[i,self.columnLabel]]))
+            l.setdefault(predCluster[i],[]).append((indices[i],self.classes[trueLabels[i]]))
         return l
     
     def getDataset(self):

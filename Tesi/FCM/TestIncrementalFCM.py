@@ -7,6 +7,7 @@ from numpy import zeros
 from FCM.Class_DataManager import DataManager
 from shutil import copyfile
 import random
+from FCM.Class_IncrementalSSFCM import IncrementalSSFCM
 
 
 def mergeDict(dict1,dict2):
@@ -28,11 +29,11 @@ if __name__ == "__main__":
         FileManager.createFileTXT(outputFileName)
        
         dm = DataManager()
-       
+    
         # uncomment if would create new chunk
         dm.loadDataset('Completedataset', column_label, column_index)
         dm.createChunks(c, nchunk)
-        trainingSet = ['chunk0','chunk1','chunk2','chunk3',]
+        trainingSet = ['chunk0','chunk1','chunk2','chunk3']
         testSet = 'chunk4'
         avgPurity = zeros(nchunk - 1)
         avgPrecision = zeros(c)
@@ -41,92 +42,53 @@ if __name__ == "__main__":
         accuratezze = []
         for j in range(n_execution):
             FileManager.writeTxt(outputFileName, "Esecuzione " + str(j + 1) + "\n", True)
-            history = []
-            dm.loadDataset(trainingSet[0], column_label, column_index)
             classes=dm.classes
-            chunk = dm.getDataset()
-            true_label = dm.getTrueLabels()
+            p=IncrementalSSFCM(c,typeDistance = FuzzyCMeans.MAHALONOBIS_NORM)
+            totalIndices=[]
+            totalTL=[]
             # uncomment if would create new labels for the first chunk
-            (b, F) = dm.labeldataset(percentToLabel, 'b0', 'F0')
+           
             # dm.loadSemiSupervisedInfo('b0', 'F0')
             
             for i in range(nchunk - 1):
                 print("chunk " + str(i))
-           
-                alfa = c*len(b) / float(numpy.count_nonzero(b))
-                # avgCentr = zeros((c,32))
-                # for z in range(10):
-                p1 = SemiSupervisedFCM(chunk, c, b, F, alfa, FuzzyCMeans.MAHALONOBIS_NORM, FuzzyCMeans.INIT_MU_RANDOM)
-                # p1 = FuzzyCMeans(chunk, c, 2,FuzzyCMeans.MAHALONOBIS_NORM,FuzzyCMeans.INIT_MU_RANDOM)
-                prototypes = p1()
-                # avgCentr += prototypes
-                # avgCentr = avgCentr / 10
-                # p1.setc(avgCentr)
-                FileManager.writeMatrix('prototypeChunk'+str(i)+'esecuzione'+str(j), prototypes, False)
-                clusters = p1.getClusters()
+                ''' Far caricare altro chunk!!!!!!!!!!!'''
+                dm.loadDataset(trainingSet[i], column_label, column_index)
+
+                chunk = dm.getDataset()
+                totalIndices.extend(dm.getIndices())
+                trueLabel = numpy.asarray([int(k) for k in dm.getTrueLabels()])
+                totalTL.extend(trueLabel)
+                (b, F) = dm.labeldataset(percentToLabel, 'b0', 'F0')
+                (prototypes, prototypesLabel)=p.incrementalSSFCM(chunk, b, F, trueLabel,1)
+                shapesCluster= p.annotateShapes(prototypes)
                 
-                #confusionMatrix = ValidityMeasures.getConfusionMatrix(true_label, clusters, c)
-                #clustersLabel = ValidityMeasures.getClusterLabels(confusionMatrix)
-                clustersLabel=p1.getClusterLabel(true_label)   
-                
-                if(useMedoids):
-                    prototypes = p1.getMedoids(true_label)
-                historyIndex = {}
-                historyTrueLabel = []
-                historyCluster = []
-                if(len(history) > 0):
+                clustersComposition = dm.clusterIndices(shapesCluster, totalIndices, totalTL)
+                pastTrueLabel=p.getPastDataTrueLabel()            
+        
+                        
                     
-                    for dmchunk in history:
-                        z = 0
-                        for el in dmchunk.getDataset():        
-                            prototypePoint = numpy.argmin(p1.computeDistance(el, prototypes))
-                            historyIndex.setdefault(prototypePoint, []).append((dmchunk.getIndexPoint()[z],classes[dmchunk.getTrueLabels()[z]],'H'))
-                            historyCluster.append(prototypePoint)
-                            z = z + 1
-                        historyTrueLabel.append(dmchunk.getTrueLabels())
-                    FileManager.writeTxt('HistoryIndexChunk'+str(i)+' Esecuzione'+str(j),str(historyIndex)+'\n Prototipi a cui appartengono le immagini \n'+str(historyCluster),True)
-                    
-                confusionMatrix = ValidityMeasures.getConfusionMatrix(numpy.append(true_label,historyTrueLabel), numpy.append(clusters,historyCluster), c)
-                FileManager.writeMatrix('ConfusionMatrixChunk'+str(i)+' Esecuzione'+str(j),confusionMatrix)
+                confusionMatrix = ValidityMeasures.getConfusionMatrix(pastTrueLabel,shapesCluster, c)
                 #clustersLabel = ValidityMeasures.getClusterLabels(confusionMatrix) 
                  
-                FileManager.writeTxt('HistoryIndexChunk'+str(i)+' Esecuzione'+str(j),'Label dei prototipi:\n'+str(range(c))+'\n'+ str(classes[clustersLabel]),True)           
-                print('clustersLabel' + str(clustersLabel))
+                print('clustersLabel' + str(prototypesLabel))
+                ''' calcolare purezza'''
                 pur = ValidityMeasures.getAveragePurityError(confusionMatrix)
-                avgPurity[i] += pur
+              
+                #avgPurity[i] += pur
                 print("pur: " + str(pur))
-                if(i > 0):
-                    clusters = clusters[c:]
-                idClusters = dm.clusterIndices(clusters)
-                idClusters = mergeDict(idClusters, historyIndex)
+                
                 '''write result in file'''
                 out = "\n" + dm.fileName + "    len=" + str(len(chunk)) + "\n"
                 out += "average purity error: " + str(pur) + "\n"
-                out += "Clusters label: " + str(classes[clustersLabel]) + "\n"
+                out += "Clusters label: " + str(classes[prototypesLabel]) + "\n"
                 for cl in range(c):
-                    out += "Cluster " + str(cl) + "\n"
-                    out += "\t" + str(idClusters.get(cl)) + "\n"
+                    out += "Cluster " + str(cl) + "  predLabel: "+str(classes[prototypesLabel[cl]])
+                    out += "\t" + str(clustersComposition.get(cl)) + "\n"
                 FileManager.writeTxt(outputFileName, out, True)
                 
-                history.append(dm)
                 
                     
-                    
-                if(i < nchunk - 2):
-                   
-                    dm = DataManager()
-                    dm.loadDataset(trainingSet[i + 1], column_label, column_index)
-                    # comment after if wouldn't use label for other chunks
-                    (b, F) = dm.labeldataset(percentToLabel, 'b' + str(i + 1) , 'F' + str(i + 1))
-                    true_label = numpy.append(clustersLabel, dm.getTrueLabels())
-                    # toggle comments if wouldn't use label for other chunks
-                    # b = numpy.append(numpy.ones(c), numpy.zeros(len(dm.getTrueLabels())))
-                    b = numpy.append(numpy.ones(c), b)
-                    
-                    Fcentr = zeros((c, c))
-                    Fcentr[range(c), clustersLabel] = 1
-                    F = numpy.concatenate((Fcentr, F), axis=0)
-                    chunk = numpy.concatenate((prototypes, dm.getDataset()), axis=0)
                     
             dm.loadDataset(testSet, column_label, column_index)
             label_test = numpy.zeros(len(dm.dataset))
@@ -134,9 +96,9 @@ if __name__ == "__main__":
             i = 0
             out='--------------------------------------------------------------Test--------------------------------------------------------------------------------------\n'
             for el in dm.getDataset():        
-                label_test[i] = clustersLabel[numpy.argmin(p1.computeDistance(el, prototypes))]
+                label_test[i] = prototypesLabel[numpy.argmin(p.computeDistance(el, prototypes))]
                 true_label_test=dm.getTrueLabels()[i]
-                indexPoint=dm.getIndexPoint()[i]
+                indexPoint=dm.getIndices()[i]
                 
                 out+='Index Point: '+ str(indexPoint)+'  True Label: '+classes[true_label_test] +'  Predicted Label: '+ classes[label_test[i]]+'\n'
                 i = i + 1
